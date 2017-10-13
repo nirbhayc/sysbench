@@ -343,4 +343,8 @@ int register_driver_oracle(sb_list_t *);
 int register_driver_pgsql(sb_list_t *);
 #endif
 
+#ifdef USE_COMDB2
+int register_driver_comdb2(sb_list_t *);
+#endif
+
 #endif /* DB_DRIVER_H */

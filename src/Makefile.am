@@ -44,6 +44,10 @@ if USE_PGSQL
 pgsql_ldadd = drivers/pgsql/libsbpgsql.a $(PGSQL_LIBS)
 endif
 
+if USE_COMDB2
+comdb2_ldadd = drivers/comdb2/libsbcomdb2.a $(COMDB2_LIBS)
+endif
+
 sysbench_SOURCES = sysbench.c sysbench.h sb_timer.c sb_timer.h \
 sb_options.c sb_options.h sb_logger.c sb_logger.h sb_list.h db_driver.h \
 db_driver.c sb_histogram.c sb_histogram.h sb_rand.c sb_rand.h \
@@ -59,7 +63,7 @@ sysbench_LDADD = tests/fileio/libsbfileio.a tests/threads/libsbthreads.a \
     tests/memory/libsbmemory.a tests/cpu/libsbcpu.a \
     tests/mutex/libsbmutex.a \
     $(mysql_ldadd) $(drizzle_ldadd) $(attachsql_ldadd) $(pgsql_ldadd) \
-    $(ora_ldadd) $(LUAJIT_LIBS) $(CK_LIBS)
+    $(ora_ldadd) $(comdb2_ldadd) $(LUAJIT_LIBS) $(CK_LIBS)
 
 sysbench_LDFLAGS = $(EXTRA_LDFLAGS) $(mysql_ldflags) $(attachsql_ldflags) \
     $(pgsql_ldflags) $(ora_ldflags) $(LUAJIT_LDFLAGS)

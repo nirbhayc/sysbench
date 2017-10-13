@@ -170,6 +170,17 @@ AS_IF([test "x$with_pgsql" != "xno"],
    [pgsql_support=no])
 AC_MSG_RESULT([$pgsql_support])
 
+# Check if we should compile with Comdb2 support
+AC_ARG_WITH([comdb2],
+            AS_HELP_STRING([--with-comdb2],
+                           [compile with Comdb2 support (default is disabled)]),
+            [], [with_comdb2=no])
+AC_MSG_CHECKING([whether to compile with Comdb2 support])
+AS_IF([test "x$with_comdb2" != "xno"],
+   [comdb2_support=yes],
+   [comdb2_support=no])
+AC_MSG_RESULT([$comdb2_support])
+
 # Set LuaJIT flags
 SB_LUAJIT
 
@@ -263,6 +274,16 @@ AS_IF([test x$with_pgsql != xno], [
 ])
 AM_CONDITIONAL(USE_PGSQL, test x$with_pgsql != xno)
 AC_SUBST([USE_PGSQL])
+
+AS_IF([test x$with_comdb2 != xno], [
+    AC_DEFINE(USE_COMDB2,1,[Define to 1 if you want to compile with Comdb2 support])
+    COMDB2_LIBS="-L/opt/bb/lib -lcdb2api -lssl -lprotobuf-c"
+    COMDB2_CFLAGS="-I/opt/bb/include"
+    AC_SUBST([COMDB2_LIBS])
+    AC_SUBST([COMDB2_CFLAGS])
+])
+AM_CONDITIONAL(USE_COMDB2, test x$with_comdb2 != xno)
+AC_SUBST([USE_COMDB2])
 
 # Check for libaio
 AC_CHECK_AIO
@@ -540,6 +561,7 @@ src/drivers/drizzle/Makefile
 src/drivers/oracle/Makefile
 src/drivers/pgsql/Makefile
 src/drivers/attachsql/Makefile
+src/drivers/comdb2/Makefile
 src/tests/Makefile
 src/tests/cpu/Makefile
 src/tests/fileio/Makefile
@@ -574,6 +596,7 @@ AC_MSG_RESULT([Drizzle support    : ${drizzle_support}])
 AC_MSG_RESULT([AttachSQL support  : ${attachsql_support}])
 AC_MSG_RESULT([Oracle support     : ${oracle_support}])
 AC_MSG_RESULT([PostgreSQL support : ${pgsql_support}])
+AC_MSG_RESULT([Comdb2 support     : ${comdb2_support}])
 AC_MSG_RESULT([])
 AC_MSG_RESULT([LuaJIT             : ${sb_use_luajit}])
 AC_MSG_RESULT([LUAJIT_CFLAGS      : ${LUAJIT_CFLAGS}])

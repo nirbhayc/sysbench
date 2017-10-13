@@ -112,6 +112,9 @@ int db_register(void)
 #ifdef USE_PGSQL
   register_driver_pgsql(&drivers);
 #endif
+#ifdef USE_COMDB2
+  register_driver_comdb2(&drivers);
+#endif
 
   /* Register command line options for each driver */
   SB_LIST_FOR_EACH(pos, &drivers)

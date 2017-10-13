@@ -180,6 +180,9 @@ function create_table(drv, con, table_num)
       else
         id_def = "SERIAL"
       end
+   elseif drv:name() == "comdb2"
+   then
+       id_def = "INTEGER NOT NULL"
    else
       error("Unsupported database driver:" .. drv:name())
    end
