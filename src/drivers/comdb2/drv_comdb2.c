@@ -6,7 +6,7 @@
 /* Comdb2 driver arguments */
 static sb_arg_t comdb2_drv_args[] = {
     SB_OPT("comdb2-db", "Comdb2 database name", "sbtest", STRING),
-    SB_OPT("comdb2-host", "Comdb2 server host or stage", "local", STRING),
+    SB_OPT("comdb2-host", "Comdb2 server host", "localhost", STRING),
     SB_OPT(
         "comdb2-verbose",
         "Print more information. (1: query, 2: effects, 3: result, 4: debug)",
@@ -73,7 +73,7 @@ static int comdb2_drv_connect(db_conn_t *sb_conn)
 
     conn_hndl = NULL;
 
-    rc = cdb2_open(&conn_hndl, args.db, args.host, 0);
+    rc = cdb2_open(&conn_hndl, args.db, args.host, CDB2_DIRECT_CPU);
     if (rc) {
         log_text(LOG_FATAL, "cdb2_open() failed (rc = %d)", rc);
         cdb2_close(conn_hndl);
