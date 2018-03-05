@@ -277,7 +277,8 @@ AC_SUBST([USE_PGSQL])
 
 AS_IF([test x$with_comdb2 != xno], [
     AC_DEFINE(USE_COMDB2,1,[Define to 1 if you want to compile with Comdb2 support])
-    COMDB2_LIBS="-L/opt/bb/lib -lcdb2api -lssl -lprotobuf-c"
+    COMDB2_LIBS="-L/opt/bb/lib -l:libcdb2api.a -lssl -lcrypto -lprotobuf-c \
+        -lunwind"
     COMDB2_CFLAGS="-I/opt/bb/include"
     AC_SUBST([COMDB2_LIBS])
     AC_SUBST([COMDB2_CFLAGS])
