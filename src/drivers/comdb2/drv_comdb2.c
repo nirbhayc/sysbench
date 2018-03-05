@@ -89,6 +89,7 @@ static int comdb2_drv_connect(db_conn_t *sb_conn)
 static int comdb2_drv_disconnect(db_conn_t *sb_conn)
 {
     cdb2_close((cdb2_hndl_tp *)sb_conn->ptr);
+    sb_conn->ptr = 0;
 
     return 0;
 }
@@ -216,6 +217,7 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
                 log_text(LOG_FATAL,
                          "comdb2_drv_bind_param(): unsupported parameter type");
                 cdb2_close(conn_hndl);
+                conn->ptr = 0;
                 return 1;
             }
 
@@ -228,6 +230,7 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
             if (rc) {
                 log_text(LOG_FATAL, "cdb2_bind_index() failed (rc = %d)", rc);
                 cdb2_close(conn_hndl);
+                conn->ptr = 0;
                 return 1;
             }
         }
@@ -236,6 +239,7 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
         if (rc) {
             log_text(LOG_FATAL, "cdb2_run_statement() failed (rc = %d)", rc);
             cdb2_close(conn_hndl);
+            conn->ptr = 0;
             return 1;
         }
 
@@ -243,6 +247,7 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
         if (rc) {
             log_text(LOG_FATAL, "cdb2_get_effects() failed (rc = %d)", rc);
             cdb2_close(conn_hndl);
+            conn->ptr = 0;
             return 1;
         }
 
@@ -266,6 +271,7 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
         if (rc) {
             log_text(LOG_FATAL, "cdb2_clearbindings() failed (rc = %d)", rc);
             cdb2_close(conn_hndl);
+            conn->ptr = 0;
             return 1;
         }
 
@@ -366,6 +372,7 @@ static db_error_t comdb2_drv_query(db_conn_t *sb_conn, const char *query,
     if (SB_UNLIKELY(rc != 0)) {
         log_text(LOG_FATAL, "cdb2_run_statement() failed (rc = %d)", rc);
         cdb2_close(conn_hndl);
+        sb_conn->ptr = 0;
         return DB_ERROR_FATAL;
     }
 
@@ -373,6 +380,7 @@ static db_error_t comdb2_drv_query(db_conn_t *sb_conn, const char *query,
     if (rc) {
         log_text(LOG_FATAL, "cdb2_get_effects() failed (rc = %d)", rc);
         cdb2_close(conn_hndl);
+        sb_conn->ptr = 0;
         return 1;
     }
 
@@ -402,6 +410,7 @@ static db_error_t comdb2_drv_query(db_conn_t *sb_conn, const char *query,
     default:
         log_text(LOG_FATAL, "cdb2_run_statement() failed (rc = %d)", rc);
         cdb2_close(conn_hndl);
+        sb_conn->ptr = 0;
         return DB_ERROR_FATAL;
     }
 
