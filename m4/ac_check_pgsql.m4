@@ -31,7 +31,7 @@ fi
 if test [ -n "$ac_cv_pgsql_libs" ]
 then
      AC_CACHE_CHECK([PostgreSQL libraries], [ac_cv_pgsql_libs], [ac_cv_pgsql_libs=""])
-     PGSQL_LIBS="-L$ac_cv_pgsql_libs -lpq"
+     PGSQL_LIBS="-L$ac_cv_pgsql_libs -l:libpq.a"
 fi
 
 # If some path is missing, try to autodetermine with pgsql_config
