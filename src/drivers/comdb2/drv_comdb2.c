@@ -75,7 +75,8 @@ static int comdb2_drv_connect(db_conn_t *sb_conn)
 
     rc = cdb2_open(&conn_hndl, args.db, args.host, CDB2_DIRECT_CPU);
     if (rc) {
-        log_text(LOG_FATAL, "cdb2_open() failed (rc = %d)", rc);
+        log_text(LOG_FATAL, "cdb2_open() failed (reason: %s, rc: %d)",
+                 cdb2_errstr(conn_hndl), rc);
         cdb2_close(conn_hndl);
         return 1;
     }
@@ -215,7 +216,8 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
             type = db_to_comdb2_type(params[i].type);
             if (type == -1) {
                 log_text(LOG_FATAL,
-                         "comdb2_drv_bind_param(): unsupported parameter type");
+                         "comdb2_drv_bind_param(): unsupported parameter type "
+                         "(reason: %s, rc: %d)", cdb2_errstr(conn_hndl), rc);
                 cdb2_close(conn_hndl);
                 conn->ptr = 0;
                 return 1;
@@ -228,7 +230,8 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
                                      params[i].max_len);
             }
             if (rc) {
-                log_text(LOG_FATAL, "cdb2_bind_index() failed (rc = %d)", rc);
+                log_text(LOG_FATAL, "cdb2_bind_index() failed (reason: %s, rc: %d)",
+                         cdb2_errstr(conn_hndl), rc);
                 cdb2_close(conn_hndl);
                 conn->ptr = 0;
                 return 1;
@@ -237,7 +240,8 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
 
         rc = cdb2_run_statement(conn_hndl, stmt->query);
         if (rc) {
-            log_text(LOG_FATAL, "cdb2_run_statement() failed (rc = %d)", rc);
+            log_text(LOG_FATAL, "cdb2_run_statement() failed (reason: %s, rc: %d)",
+                     cdb2_errstr(conn_hndl), rc);
             cdb2_close(conn_hndl);
             conn->ptr = 0;
             return 1;
@@ -245,7 +249,8 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
 
         rc = cdb2_get_effects(conn_hndl, &effects);
         if (rc) {
-            log_text(LOG_FATAL, "cdb2_get_effects() failed (rc = %d)", rc);
+            log_text(LOG_FATAL, "cdb2_get_effects() failed (reason: %s, rc: %d)",
+                     cdb2_errstr(conn_hndl), rc);
             cdb2_close(conn_hndl);
             conn->ptr = 0;
             return 1;
@@ -269,7 +274,8 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
 
         rc = cdb2_clearbindings(conn_hndl);
         if (rc) {
-            log_text(LOG_FATAL, "cdb2_clearbindings() failed (rc = %d)", rc);
+            log_text(LOG_FATAL, "cdb2_clearbindings() failed (reason: %s, rc: %d)",
+                     cdb2_errstr(conn_hndl), rc);
             cdb2_close(conn_hndl);
             conn->ptr = 0;
             return 1;
@@ -370,7 +376,8 @@ static db_error_t comdb2_drv_query(db_conn_t *sb_conn, const char *query,
 
     rc = cdb2_run_statement(conn_hndl, query);
     if (SB_UNLIKELY(rc != 0)) {
-        log_text(LOG_FATAL, "cdb2_run_statement() failed (rc = %d)", rc);
+        log_text(LOG_FATAL, "cdb2_run_statement() failed (reason: %s, rc: %d)",
+                 cdb2_errstr(conn_hndl), rc);
         cdb2_close(conn_hndl);
         sb_conn->ptr = 0;
         return DB_ERROR_FATAL;
@@ -378,7 +385,8 @@ static db_error_t comdb2_drv_query(db_conn_t *sb_conn, const char *query,
 
     rc = cdb2_get_effects(conn_hndl, &effects);
     if (rc) {
-        log_text(LOG_FATAL, "cdb2_get_effects() failed (rc = %d)", rc);
+        log_text(LOG_FATAL, "cdb2_get_effects() failed (reason: %s, rc = %d)",
+                 cdb2_errstr(conn_hndl), rc);
         cdb2_close(conn_hndl);
         sb_conn->ptr = 0;
         return 1;
@@ -408,7 +416,8 @@ static db_error_t comdb2_drv_query(db_conn_t *sb_conn, const char *query,
     case CDB2_OK_DONE:
         break; /* Result set exhausted */
     default:
-        log_text(LOG_FATAL, "cdb2_run_statement() failed (rc = %d)", rc);
+        log_text(LOG_FATAL, "cdb2_run_statement() failed (reason: %s, rc: %d)",
+                 cdb2_errstr(conn_hndl), rc);
         cdb2_close(conn_hndl);
         sb_conn->ptr = 0;
         return DB_ERROR_FATAL;
