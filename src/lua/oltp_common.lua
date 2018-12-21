@@ -73,7 +73,9 @@ sysbench.cmdline.options = {
           "PostgreSQL driver. The only currently supported " ..
           "variant is 'redshift'. When enabled, " ..
           "create_secondary is automatically disabled, and " ..
-          "delete_inserts is set to 0"}
+          "delete_inserts is set to 0"},
+   comdb2_use_csc2 =
+      {"Use CSC2 schema for DDL", true},
 }
 
 -- Prepare the dataset. This command supports parallel execution, i.e. will
@@ -189,7 +191,37 @@ function create_table(drv, con, table_num)
 
    print(string.format("Creating table 'sbtest%d'...", table_num))
 
-   query = string.format([[
+   if drv:name() == "comdb2" and sysbench.opt.comdb2_use_csc2
+   then
+      local comdb2_id_index = ""
+      local comdb2_k_index  = ""
+
+      if sysbench.opt.secondary then
+          comdb2_id_index = "dup \"IDX\" = id"
+      else
+          comdb2_id_index = "\"COMDB2_PK\" = id"
+      end
+
+
+      if sysbench.opt.create_secondary then
+          comdb2_k_index = string.format("dup \"k_%d\" = k", table_num)
+      end
+
+      query = string.format([[
+CREATE TABLE sbtest%d {
+    tag ondisk {
+        int     id
+        int     k        dbstore=0
+        cstring c[121]   dbstore=""
+        cstring pad[61]  dbstore=""
+    }
+    keys {
+        %s
+        %s
+    }
+}]], table_num, comdb2_id_index, comdb2_k_index)
+   else
+      query = string.format([[
 CREATE TABLE sbtest%d(
   id %s,
   k INTEGER DEFAULT '0' NOT NULL,
@@ -198,6 +230,9 @@ CREATE TABLE sbtest%d(
   %s (id)
 ) %s %s]],
       table_num, id_def, id_index_def, engine_def, extra_table_options)
+   end
+
+   print(query)
 
    con:query(query)
 
@@ -237,11 +272,17 @@ CREATE TABLE sbtest%d(
 
    con:bulk_insert_done()
 
-   if sysbench.opt.create_secondary then
-      print(string.format("Creating a secondary index on 'sbtest%d'...",
-                          table_num))
-      con:query(string.format("CREATE INDEX k_%d ON sbtest%d(k)",
-                              table_num, table_num))
+   if sysbench.opt.create_secondary then 
+      if drv:name() == "comdb2" and sysbench.opt.comdb2_use_csc2
+      then
+          print(string.format("Also created an index on 'sbtest%d'...",
+                              table_num))
+      else
+          print(string.format("Creating a secondary index on 'sbtest%d'...",
+                              table_num))
+          con:query(string.format("CREATE INDEX k_%d ON sbtest%d(k)",
+                                  table_num, table_num))
+      end
    end
 end
 
