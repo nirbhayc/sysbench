@@ -7,6 +7,7 @@
 static sb_arg_t comdb2_drv_args[] = {
     SB_OPT("comdb2-db", "Comdb2 database name", "sbtest", STRING),
     SB_OPT("comdb2-host", "Comdb2 server host", "localhost", STRING),
+    SB_OPT("comdb2-ignore-errors", "List of error codes to ignore", "", LIST),
     SB_OPT(
         "comdb2-verbose",
         "Print more information. (1: query, 2: effects, 3: result, 4: debug)",
@@ -17,6 +18,7 @@ static sb_arg_t comdb2_drv_args[] = {
 typedef struct {
     char *db;
     char *host;
+    sb_list_t *ignored_errors;
     int verbose;
 } comdb2_drv_args_t;
 
@@ -39,6 +41,7 @@ static int comdb2_drv_init(void)
 {
     args.db = sb_get_value_string("comdb2-db");
     args.host = sb_get_value_string("comdb2-host");
+    args.ignored_errors = sb_get_value_list("comdb2-ignore-errors");
     args.verbose = sb_get_value_int("comdb2-verbose");
 
     /* Bump the verbosity appropriately */
@@ -56,13 +59,43 @@ static int comdb2_drv_init(void)
         use_ps = 0;
     }
 
-    return 0;
+    return DB_ERROR_NONE;
 }
 
 static int comdb2_drv_describe(drv_caps_t *caps)
 {
     *caps = comdb2_drv_caps;
-    return 0;
+    return DB_ERROR_NONE;
+}
+
+static db_error_t check_error(cdb2_hndl_tp *conn_hndl, const char *func,
+                              const char *query, sb_counter_type_t *counter,
+                              int rc)
+{
+    sb_list_item_t *pos;
+    int tmp;
+
+    *counter = SB_CNT_ERROR;
+
+    SB_LIST_FOR_EACH(pos, args.ignored_errors)
+    {
+        const char *val = SB_LIST_ENTRY(pos, value_t, listitem)->data;
+        tmp = atoi(val);
+        if (rc == tmp) {
+            log_text(LOG_DEBUG, "Ignoring error %d", rc);
+        }
+
+        /* TODO: Check if we need to reconnect */
+
+        log_text(LOG_WARNING, "%s failed (query: %s, reason: %s, rc: %d)", func,
+                 (query) ? query : "(null)", cdb2_errstr(conn_hndl), rc);
+        return DB_ERROR_IGNORABLE;
+    }
+
+    log_text(LOG_FATAL, "%s failed (query: %s, reason: %s, rc: %d)", func,
+             (query) ? query : "(null)", cdb2_errstr(conn_hndl), rc);
+
+    return DB_ERROR_FATAL;
 }
 
 /* Connect to Comdb2 */
@@ -78,12 +111,12 @@ static int comdb2_drv_connect(db_conn_t *sb_conn)
         log_text(LOG_FATAL, "cdb2_open() failed (reason: %s, rc: %d)",
                  cdb2_errstr(conn_hndl), rc);
         cdb2_close(conn_hndl);
-        return 1;
+        return DB_ERROR_FATAL;
     }
 
     sb_conn->ptr = conn_hndl;
 
-    return 0;
+    return DB_ERROR_NONE;
 }
 
 /* Close Comdb2 connection handle */
@@ -92,7 +125,7 @@ static int comdb2_drv_disconnect(db_conn_t *sb_conn)
     cdb2_close((cdb2_hndl_tp *)sb_conn->ptr);
     sb_conn->ptr = 0;
 
-    return 0;
+    return DB_ERROR_NONE;
 }
 
 /* Prepare a statement */
@@ -107,7 +140,7 @@ static int comdb2_drv_prepare(db_stmt_t *stmt, const char *query, size_t len)
     /* Create a copy of the query */
     stmt->query = strdup(query);
 
-    return 0;
+    return DB_ERROR_NONE;
 }
 
 /* DB-to-PgSQL bind types map */
@@ -153,7 +186,7 @@ static int comdb2_drv_bind_param(db_stmt_t *stmt, db_bind_t *params, size_t len)
     if (stmt->bound_param == NULL) {
         log_text(LOG_FATAL, "ERROR: exiting comdb2_drv_bind_param(), "
                             "memory allocation failure");
-        return 1;
+        return DB_ERROR_FATAL;
     }
     memcpy(stmt->bound_param, params, sz);
     stmt->bound_param_len = len;
@@ -161,10 +194,10 @@ static int comdb2_drv_bind_param(db_stmt_t *stmt, db_bind_t *params, size_t len)
     /*
       In case of prepared statements, we defer the binding of parameters
       in cdb2_drv_execute(), as parameters are cached in comdb2 connection
-      handle and thus need to be cleared aftere cdb2_run_statement().
+      handle and thus need to be cleared after cdb2_run_statement().
     */
 
-    return 0;
+    return DB_ERROR_NONE;
 }
 
 static int comdb2_drv_bind_result(db_stmt_t *stmt, db_bind_t *params,
@@ -175,7 +208,7 @@ static int comdb2_drv_bind_result(db_stmt_t *stmt, db_bind_t *params,
     (void)params;
     (void)len;
 
-    return 0;
+    return DB_ERROR_NONE;
 }
 
 /* Forward declaration */
@@ -217,10 +250,11 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
             if (type == -1) {
                 log_text(LOG_FATAL,
                          "comdb2_drv_bind_param(): unsupported parameter type "
-                         "(reason: %s, rc: %d)", cdb2_errstr(conn_hndl), rc);
+                         "(reason: %s, rc: %d)",
+                         cdb2_errstr(conn_hndl), rc);
                 cdb2_close(conn_hndl);
                 conn->ptr = 0;
-                return 1;
+                return DB_ERROR_FATAL;
             }
 
             if (params[i].is_null && *params[i].is_null) {
@@ -230,30 +264,30 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
                                      params[i].max_len);
             }
             if (rc) {
-                log_text(LOG_FATAL, "cdb2_bind_index() failed (reason: %s, rc: %d)",
-                         cdb2_errstr(conn_hndl), rc);
+                rc = check_error(conn_hndl, "cdb2_bind_index()", stmt->query,
+                                 &rs->counter, rc);
                 cdb2_close(conn_hndl);
                 conn->ptr = 0;
-                return 1;
+                return rc;
             }
         }
 
         rc = cdb2_run_statement(conn_hndl, stmt->query);
         if (rc) {
-            log_text(LOG_FATAL, "cdb2_run_statement() failed (reason: %s, rc: %d)",
-                     cdb2_errstr(conn_hndl), rc);
+            rc = check_error(conn_hndl, "cdb2_run_statement()", stmt->query,
+                             &rs->counter, rc);
             cdb2_close(conn_hndl);
             conn->ptr = 0;
-            return 1;
+            return rc;
         }
 
         rc = cdb2_get_effects(conn_hndl, &effects);
         if (rc) {
-            log_text(LOG_FATAL, "cdb2_get_effects() failed (reason: %s, rc: %d)",
-                     cdb2_errstr(conn_hndl), rc);
+            rc = check_error(conn_hndl, "cdb2_get_effects()", stmt->query,
+                             &rs->counter, rc);
             cdb2_close(conn_hndl);
             conn->ptr = 0;
-            return 1;
+            return rc;
         }
 
         if (effects.num_affected > 0) {
@@ -265,8 +299,9 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
         }
 
         if (SB_UNLIKELY(args.verbose > 1)) {
-            log_text(LOG_INFO, "cdb2_get_effects(): affected: %d, selected: "
-                               "%d, updated: %d, deleted: %d, inserted: %d",
+            log_text(LOG_INFO,
+                     "cdb2_get_effects(): affected: %d, selected: "
+                     "%d, updated: %d, deleted: %d, inserted: %d",
                      effects.num_affected, effects.num_selected,
                      effects.num_updated, effects.num_deleted,
                      effects.num_inserted);
@@ -274,21 +309,21 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
 
         rc = cdb2_clearbindings(conn_hndl);
         if (rc) {
-            log_text(LOG_FATAL, "cdb2_clearbindings() failed (reason: %s, rc: %d)",
-                     cdb2_errstr(conn_hndl), rc);
+            rc = check_error(conn_hndl, "cdb2_clearbindings()", stmt->query,
+                             &rs->counter, rc);
             cdb2_close(conn_hndl);
             conn->ptr = 0;
-            return 1;
+            return rc;
         }
 
-        return 0;
+        return DB_ERROR_NONE;
     }
 
     /*
       Use emulation
       Build the actual query string from parameters list.
-      NOTE: The following logic has been copied from drv_mysql.c to keep the
-      code common to all drivers same.
+      NOTE: The following logic has been copied from drv_mysql.c in an
+      attempt to keep the code common across all drivers.
     */
     need_realloc = 1;
     vcnt = 0;
@@ -324,14 +359,14 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
     rc = comdb2_drv_query(conn, buf, j, rs);
 
     free(buf);
-    return 0;
+    return DB_ERROR_NONE;
 }
 
 static int comdb2_drv_fetch(db_result_t *rs)
 {
     (void)rs;
 
-    return 0;
+    return DB_ERROR_NONE;
 }
 
 static int comdb2_drv_fetch_row(db_result_t *rs, db_row_t *row)
@@ -339,20 +374,20 @@ static int comdb2_drv_fetch_row(db_result_t *rs, db_row_t *row)
     (void)rs;
     (void)row;
     assert(0);
-    return 0;
+    return DB_ERROR_NONE;
 }
 
 static int comdb2_drv_free_results(db_result_t *rs)
 {
     (void)rs;
-    return 0;
+    return DB_ERROR_NONE;
 }
 
 static int comdb2_drv_close(db_stmt_t *stmt)
 {
     (void)stmt;
     /* TODO: free resources */
-    return 0;
+    return DB_ERROR_NONE;
 }
 
 static db_error_t comdb2_drv_query(db_conn_t *sb_conn, const char *query,
@@ -376,20 +411,20 @@ static db_error_t comdb2_drv_query(db_conn_t *sb_conn, const char *query,
 
     rc = cdb2_run_statement(conn_hndl, query);
     if (SB_UNLIKELY(rc != 0)) {
-        log_text(LOG_FATAL, "cdb2_run_statement() failed (reason: %s, rc: %d)",
-                 cdb2_errstr(conn_hndl), rc);
+        rc = check_error(conn_hndl, "cdb2_run_statement()", query, &rs->counter,
+                         rc);
         cdb2_close(conn_hndl);
         sb_conn->ptr = 0;
-        return DB_ERROR_FATAL;
+        return rc;
     }
 
     rc = cdb2_get_effects(conn_hndl, &effects);
     if (rc) {
-        log_text(LOG_FATAL, "cdb2_get_effects() failed (reason: %s, rc = %d)",
-                 cdb2_errstr(conn_hndl), rc);
+        rc = check_error(conn_hndl, "cdb2_get_effects()", query, &rs->counter,
+                         rc);
         cdb2_close(conn_hndl);
         sb_conn->ptr = 0;
-        return 1;
+        return rc;
     }
 
     if (effects.num_affected > 0) {
@@ -401,8 +436,9 @@ static db_error_t comdb2_drv_query(db_conn_t *sb_conn, const char *query,
     }
 
     if (SB_UNLIKELY(args.verbose > 1)) {
-        log_text(LOG_INFO, "cdb2_get_effects(): affected: %d, selected: %d, "
-                           "updated: %d, deleted: %d, inserted: %d",
+        log_text(LOG_INFO,
+                 "cdb2_get_effects(): affected: %d, selected: %d, "
+                 "updated: %d, deleted: %d, inserted: %d",
                  effects.num_affected, effects.num_selected,
                  effects.num_updated, effects.num_deleted,
                  effects.num_inserted);
@@ -416,19 +452,19 @@ static db_error_t comdb2_drv_query(db_conn_t *sb_conn, const char *query,
     case CDB2_OK_DONE:
         break; /* Result set exhausted */
     default:
-        log_text(LOG_FATAL, "cdb2_run_statement() failed (reason: %s, rc: %d)",
-                 cdb2_errstr(conn_hndl), rc);
+        rc = check_error(conn_hndl, "cdb2_next_record()", query, &rs->counter,
+                         rc);
         cdb2_close(conn_hndl);
         sb_conn->ptr = 0;
-        return DB_ERROR_FATAL;
+        return rc;
     }
 
-    return 0;
+    return DB_ERROR_NONE;
 }
 
 static int comdb2_drv_done(void)
 {
-    return 0;
+    return DB_ERROR_NONE;
 }
 
 /* Comdb2 driver definition */
