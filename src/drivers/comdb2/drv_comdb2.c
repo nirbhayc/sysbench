@@ -68,32 +68,36 @@ static int comdb2_drv_describe(drv_caps_t *caps)
     return DB_ERROR_NONE;
 }
 
-static db_error_t check_error(cdb2_hndl_tp *conn_hndl, const char *func,
+static db_error_t check_error(db_conn_t *sb_conn, const char *func,
                               const char *query, sb_counter_type_t *counter,
                               int rc)
 {
+    cdb2_hndl_tp *conn_hndl = sb_conn->ptr;
     sb_list_item_t *pos;
     int tmp;
 
     *counter = SB_CNT_ERROR;
 
+    sb_conn->sql_state = "COMDB2 ERROR";
+    sb_conn->sql_errmsg = cdb2_errstr(conn_hndl);
+
     SB_LIST_FOR_EACH(pos, args.ignored_errors)
     {
         const char *val = SB_LIST_ENTRY(pos, value_t, listitem)->data;
         tmp = atoi(val);
+        /* TODO: Check if we need to reconnect */
         if (rc == tmp) {
             log_text(LOG_DEBUG, "Ignoring error %d", rc);
+            cdb2_clearbindings(conn_hndl);
+            return DB_ERROR_IGNORABLE;
         }
-
-        /* TODO: Check if we need to reconnect */
-
-        log_text(LOG_WARNING, "%s failed (query: %s, reason: %s, rc: %d)", func,
-                 (query) ? query : "(null)", cdb2_errstr(conn_hndl), rc);
-        return DB_ERROR_IGNORABLE;
     }
 
     log_text(LOG_FATAL, "%s failed (query: %s, reason: %s, rc: %d)", func,
              (query) ? query : "(null)", cdb2_errstr(conn_hndl), rc);
+
+    cdb2_close(conn_hndl);
+    sb_conn->ptr = 0;
 
     return DB_ERROR_FATAL;
 }
@@ -264,30 +268,21 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
                                      params[i].max_len);
             }
             if (rc) {
-                rc = check_error(conn_hndl, "cdb2_bind_index()", stmt->query,
-                                 &rs->counter, rc);
-                cdb2_close(conn_hndl);
-                conn->ptr = 0;
-                return rc;
+                return check_error(conn, "cdb2_bind_index()", stmt->query,
+                                   &rs->counter, rc);
             }
         }
 
         rc = cdb2_run_statement(conn_hndl, stmt->query);
         if (rc) {
-            rc = check_error(conn_hndl, "cdb2_run_statement()", stmt->query,
-                             &rs->counter, rc);
-            cdb2_close(conn_hndl);
-            conn->ptr = 0;
-            return rc;
+            return check_error(conn, "cdb2_run_statement()", stmt->query,
+                               &rs->counter, rc);
         }
 
         rc = cdb2_get_effects(conn_hndl, &effects);
         if (rc) {
-            rc = check_error(conn_hndl, "cdb2_get_effects()", stmt->query,
-                             &rs->counter, rc);
-            cdb2_close(conn_hndl);
-            conn->ptr = 0;
-            return rc;
+            return check_error(conn, "cdb2_get_effects()", stmt->query,
+                               &rs->counter, rc);
         }
 
         if (effects.num_affected > 0) {
@@ -309,11 +304,8 @@ static db_error_t comdb2_drv_execute(db_stmt_t *stmt, db_result_t *rs)
 
         rc = cdb2_clearbindings(conn_hndl);
         if (rc) {
-            rc = check_error(conn_hndl, "cdb2_clearbindings()", stmt->query,
-                             &rs->counter, rc);
-            cdb2_close(conn_hndl);
-            conn->ptr = 0;
-            return rc;
+            return check_error(conn, "cdb2_clearbindings()", stmt->query,
+                               &rs->counter, rc);
         }
 
         return DB_ERROR_NONE;
@@ -411,20 +403,14 @@ static db_error_t comdb2_drv_query(db_conn_t *sb_conn, const char *query,
 
     rc = cdb2_run_statement(conn_hndl, query);
     if (SB_UNLIKELY(rc != 0)) {
-        rc = check_error(conn_hndl, "cdb2_run_statement()", query, &rs->counter,
-                         rc);
-        cdb2_close(conn_hndl);
-        sb_conn->ptr = 0;
-        return rc;
+        return check_error(sb_conn, "cdb2_run_statement()", query, &rs->counter,
+                           rc);
     }
 
     rc = cdb2_get_effects(conn_hndl, &effects);
     if (rc) {
-        rc = check_error(conn_hndl, "cdb2_get_effects()", query, &rs->counter,
-                         rc);
-        cdb2_close(conn_hndl);
-        sb_conn->ptr = 0;
-        return rc;
+        return check_error(sb_conn, "cdb2_get_effects()", query, &rs->counter,
+                           rc);
     }
 
     if (effects.num_affected > 0) {
@@ -452,11 +438,8 @@ static db_error_t comdb2_drv_query(db_conn_t *sb_conn, const char *query,
     case CDB2_OK_DONE:
         break; /* Result set exhausted */
     default:
-        rc = check_error(conn_hndl, "cdb2_next_record()", query, &rs->counter,
-                         rc);
-        cdb2_close(conn_hndl);
-        sb_conn->ptr = 0;
-        return rc;
+        return check_error(sb_conn, "cdb2_next_record()", query, &rs->counter,
+                           rc);
     }
 
     return DB_ERROR_NONE;
