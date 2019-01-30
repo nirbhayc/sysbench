@@ -79,7 +79,7 @@ static db_error_t check_error(db_conn_t *sb_conn, const char *func,
     *counter = SB_CNT_ERROR;
 
     sb_conn->sql_state = "COMDB2 ERROR";
-    sb_conn->sql_errmsg = cdb2_errstr(conn_hndl);
+    sb_conn->sql_errmsg = strdup(cdb2_errstr(conn_hndl));
 
     SB_LIST_FOR_EACH(pos, args.ignored_errors)
     {
@@ -128,6 +128,8 @@ static int comdb2_drv_connect(db_conn_t *sb_conn)
 static int comdb2_drv_disconnect(db_conn_t *sb_conn)
 {
     cdb2_close((cdb2_hndl_tp *)sb_conn->ptr);
+
+    free(sb_conn->sql_errmsg);
     sb_conn->ptr = 0;
 
     return DB_ERROR_NONE;
