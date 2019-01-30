@@ -20,11 +20,25 @@ function prepare()
 
    for i = 1, sysbench.opt.threads do
       print("Creating table 'sbtest" .. i .. "'...")
-      con:query(string.format([[
-        CREATE TABLE IF NOT EXISTS sbtest%d (
-          id INTEGER NOT NULL,
-          k INTEGER DEFAULT '0' NOT NULL,
-          PRIMARY KEY (id))]], i))
+      if drv:name() == "comdb2"
+      then
+         con:query(string.format([[
+           CREATE TABLE IF NOT EXISTS sbtest%d {
+             tag ondisk {
+               int     id
+               int     k        dbstore=0
+             }
+             keys {
+               "COMDB2_PK" = id
+             }
+           }]], i))
+      else
+         con:query(string.format([[
+           CREATE TABLE IF NOT EXISTS sbtest%d (
+             id INTEGER NOT NULL,
+             k INTEGER DEFAULT '0' NOT NULL,
+             PRIMARY KEY (id))]], i))
+      end
    end
 end
 

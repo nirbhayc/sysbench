@@ -273,11 +273,8 @@ CREATE TABLE sbtest%d(
    con:bulk_insert_done()
 
    if sysbench.opt.create_secondary then 
-      if drv:name() == "comdb2" and sysbench.opt.comdb2_use_csc2
+      if drv:name() != "comdb2"
       then
-          print(string.format("Also created an index on 'sbtest%d'...",
-                              table_num))
-      else
           print(string.format("Creating a secondary index on 'sbtest%d'...",
                               table_num))
           con:query(string.format("CREATE INDEX k_%d ON sbtest%d(k)",
