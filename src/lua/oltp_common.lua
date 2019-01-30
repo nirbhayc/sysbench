@@ -273,7 +273,7 @@ CREATE TABLE sbtest%d(
    con:bulk_insert_done()
 
    if sysbench.opt.create_secondary then 
-      if drv:name() != "comdb2"
+      if drv:name() ~= "comdb2"
       then
           print(string.format("Creating a secondary index on 'sbtest%d'...",
                               table_num))
