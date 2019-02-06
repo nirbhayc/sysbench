@@ -106,12 +106,19 @@ static db_error_t check_error(db_conn_t *sb_conn, const char *func,
 static int comdb2_drv_connect(db_conn_t *sb_conn)
 {
     cdb2_hndl_tp *conn_hndl;
+    int flags;
     int rc;
 
     conn_hndl = NULL;
 
-    rc = cdb2_open(&conn_hndl, args.db, args.host,
-                   CDB2_DIRECT_CPU | CDB2_READ_INTRANS_RESULTS);
+    flags = 0;
+    if (args.host[0] != '@') {
+        flags |= CDB2_DIRECT_CPU;
+
+    }
+    flags |= CDB2_READ_INTRANS_RESULTS;
+
+    rc = cdb2_open(&conn_hndl, args.db, args.host, flags);
     if (rc) {
         log_text(LOG_FATAL, "cdb2_open() failed (reason: %s, rc: %d)",
                  cdb2_errstr(conn_hndl), rc);
