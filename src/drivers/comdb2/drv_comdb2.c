@@ -93,7 +93,7 @@ static db_error_t check_error(db_conn_t *sb_conn, const char *func,
         }
     }
 
-    log_text(LOG_FATAL, "%s failed (query: %s, reason: %s, rc: %d)", func,
+    log_text(LOG_FATAL, "%s failed (query: %.40s, reason: %s, rc: %d)", func,
              (query) ? query : "(null)", cdb2_errstr(conn_hndl), rc);
 
     cdb2_close(conn_hndl);
