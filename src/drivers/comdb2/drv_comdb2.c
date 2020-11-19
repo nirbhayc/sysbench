@@ -59,6 +59,10 @@ static int comdb2_drv_init(void)
         use_ps = 0;
     }
 
+    if (getenv("CDB2_DISABLE_SOCKPOOL")) {
+        cdb2_disable_sockpool();
+    }
+
     return DB_ERROR_NONE;
 }
 
